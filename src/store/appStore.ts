@@ -7,8 +7,10 @@ import {
   getTrashItems,
   deleteTrashItem,
   recoverTrashItem,
+  getLargeFiles,
+  revealInFolder,
 } from "../lib/tauri";
-import type { AppItem, StorageInfo, InstalledApp, TrashItem } from "../features/applications/types";
+import type { AppItem, StorageInfo, InstalledApp, TrashItem, LargeFile } from "../features/applications/types";
 
 type Sort = "size" | "name";
 
@@ -17,10 +19,12 @@ interface AppState {
   storage: StorageInfo | null;
   installed: InstalledApp[];
   trash: TrashItem[];
+  largeFiles: LargeFile[];
   query: string;
   sort: Sort;
   message: string;
   confirming: boolean;
+  loading: boolean;
   fetchAll: () => Promise<void>;
   setQuery: (query: string) => void;
   setSort: (sort: Sort) => void;
@@ -31,6 +35,8 @@ interface AppState {
   deleteTrash: (path: string) => Promise<void>;
   recoverTrash: (path: string) => Promise<void>;
   rescanInstalled: () => Promise<void>;
+  rescanLargeFiles: () => Promise<void>;
+  revealLargeFile: (path: string) => Promise<void>;
 }
 
 const iconClasses = [
@@ -47,17 +53,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   storage: null,
   installed: [],
   trash: [],
+  largeFiles: [],
   query: "",
   sort: "size",
   message: "",
   confirming: false,
+  loading: true,
 
   fetchAll: async () => {
-    const [storage, apps, installed, trash] = await Promise.all([
+    set({ loading: true });
+    const [storage, apps, installed, trash, largeFiles] = await Promise.all([
       getStorageInfo().catch(() => null),
       getInstalledApps().catch(() => []),
       getRecentlyInstalled().catch(() => []),
       getTrashItems().catch(() => []),
+      getLargeFiles().catch(() => []),
     ]);
     set({
       storage,
@@ -77,6 +87,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       })),
       installed,
       trash,
+      largeFiles,
+      loading: false,
     });
   },
 
@@ -129,5 +141,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   rescanInstalled: async () => {
     const installed = await getRecentlyInstalled().catch(() => get().installed);
     set({ installed });
+  },
+  rescanLargeFiles: async () => {
+    const largeFiles = await getLargeFiles().catch(() => get().largeFiles);
+    set({ largeFiles });
+  },
+  revealLargeFile: async (path) => {
+    await revealInFolder(path);
   },
 }));

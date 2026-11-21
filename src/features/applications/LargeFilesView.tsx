@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../components/Icon";
 import type { IconName } from "../../components/Icon";
+import { getLargeFiles, revealInFolder, deleteLargeFile } from "../../lib/tauri";
+import type { LargeFile } from "../../features/applications/types";
 
-type Category = "All" | "Images" | "Videos" | "Documents" | "Folders" | "Temporary" | "Cache";
+type Category = "All" | "Images" | "Videos" | "Documents" | "Folders" | "Temporary" | "Cache" | "Other";
 
 type FileItem = {
   id: number;
@@ -22,17 +24,8 @@ const categories = [
   { name: "Folders", icon: "folder", count: 12, size: "4.9 GB" },
   { name: "Temporary", icon: "clock", count: 9, size: "1.6 GB" },
   { name: "Cache", icon: "archive", count: 7, size: "1.2 GB" },
+  { name: "Other", icon: "file", count: 0, size: "" },
 ] as const;
-
-const initialFiles: FileItem[] = [
-  { id: 1, name: "Archive.zip", path: "~/Downloads", category: "Cache", modified: "Today", sizeMb: 1200, selected: false },
-];
-
-function formatSize(sizeMb: number) {
-  return sizeMb >= 1024
-    ? `${(sizeMb / 1024).toFixed(sizeMb >= 10240 ? 1 : 2)} GB`
-    : `${sizeMb} MB`;
-}
 
 function categoryIcon(category: FileItem["category"]): IconName {
   const icons: Record<FileItem["category"], IconName> = {
@@ -42,43 +35,66 @@ function categoryIcon(category: FileItem["category"]): IconName {
     Folders: "folder",
     Temporary: "clock",
     Cache: "archive",
+    Other: "file",
   };
   return icons[category];
 }
 
 export function LargeFilesView() {
-  const [files, setFiles] = useState(initialFiles);
+  const [files, setFiles] = useState<LargeFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [query, setQuery] = useState("");
-  const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getLargeFiles(5);
+      setFiles(data);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
 
   const visibleFiles = useMemo(
     () =>
       files
         .filter((file) => activeCategory === "All" || file.category === activeCategory)
         .filter((file) => file.name.toLowerCase().includes(query.toLowerCase()))
-        .sort((a, b) => b.sizeMb - a.sizeMb),
+        .sort((a, b) => b.size_bytes - a.size_bytes),
     [activeCategory, files, query],
   );
 
-  const selected = files.filter((file) => file.selected);
-  const selectedMb = selected.reduce((total, file) => total + file.sizeMb, 0);
+  const categoryStats = useMemo(() => {
+    const stats: Record<string, { count: number; size: number }> = {};
+    let totalCount = 0;
+    let totalSize = 0;
+    for (const file of files) {
+      if (!stats[file.category]) stats[file.category] = { count: 0, size: 0 };
+      stats[file.category].count += 1;
+      stats[file.category].size += file.size_bytes;
+      totalCount += 1;
+      totalSize += file.size_bytes;
+    }
+    stats.All = { count: totalCount, size: totalSize };
+    return stats;
+  }, [files]);
 
-  function toggleFile(id: number) {
-    setFiles((current) =>
-      current.map((file) =>
-        file.id === id ? { ...file, selected: !file.selected } : file,
-      ),
-    );
-    setMessage("");
-  }
-
-  function removeFiles() {
-    setFiles((current) => current.filter((file) => !file.selected));
-    setConfirming(false);
-    setMessage(`${selected.length} items moved to Trash`);
-  }
+  const formatBytes = (bytes: number) =>
+    bytes >= 1024 * 1024 * 1024
+      ? `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+      : bytes >= 1024 * 1024
+      ? `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+      : `${bytes} B`;
 
   return (
     <>
@@ -87,26 +103,30 @@ export function LargeFilesView() {
           <strong>{activeCategory === "All" ? "All large files" : activeCategory}</strong>
           <span>· {visibleFiles.length} shown</span>
         </p>
-        <label className="sort-select">
-          Search:
-          <input
-            aria-label="Search files"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search files"
-            value={query}
-            style={{ marginLeft: 8, border: "1px solid #dfe5e2", borderRadius: 6, padding: "4px 8px" }}
-          />
-        </label>
+        <div>
+          <label className="sort-select">
+            Search:
+            <input
+              aria-label="Search files"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search files"
+              value={query}
+              style={{ marginLeft: 8, border: "1px solid #dfe5e2", borderRadius: 6, padding: "4px 8px" }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
+            style={{ marginLeft: 8, border: "1px solid #dfe5e2", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}
+          >
+            {viewMode === "list" ? <Icon name="grid" size={16} /> : <Icon name="list" size={16} />}
+          </button>
+        </div>
       </div>
 
+      {loading && <div className="empty-state"><strong>Scanning files…</strong></div>}
+      {error && <div className="empty-state"><strong>Error</strong><span>{error}</span></div>}
       <section className="category-section" aria-label="File categories">
-        <div className="section-heading">
-          <div>
-            <strong>Browse by type</strong>
-            <span>36.2 GB found across 124 items</span>
-          </div>
-          <button type="button">Rescan</button>
-        </div>
         <div className="category-strip">
           {categories.map((category) => (
             <button
@@ -114,7 +134,6 @@ export function LargeFilesView() {
               key={category.name}
               onClick={() => {
                 setActiveCategory(category.name);
-                setMessage("");
               }}
               type="button"
             >
@@ -123,14 +142,15 @@ export function LargeFilesView() {
               </span>
               <span className="category-copy">
                 <strong>{category.name}</strong>
-                <small>{category.count} items</small>
+                <small>{categoryStats[category.name]?.count ?? 0} items</small>
               </span>
-              <b>{category.size}</b>
+              <b>{formatBytes(categoryStats[category.name]?.size ?? 0)}</b>
             </button>
           ))}
         </div>
       </section>
 
+      {viewMode === "list" ? (
       <div className="app-list file-list">
         <div className="list-head file-list-head">
           <span>Name & location</span>
@@ -138,33 +158,52 @@ export function LargeFilesView() {
           <span>Size</span>
           <span />
         </div>
-        {visibleFiles.map((file) => (
-          <button
-            className={`app-row file-row ${file.selected ? "selected" : ""}`}
-            key={file.id}
-            onClick={() => toggleFile(file.id)}
-            type="button"
-          >
-            <span className={`checkbox ${file.selected ? "checked" : ""}`}>
-              {file.selected && (
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="m2.5 6 2.2 2.2L9.6 3.5" />
-                </svg>
-              )}
-            </span>
+        {visibleFiles.map((file, index) => (
+          <div className="app-row file-row" key={`${file.path}-${index}`}>
+            <span />
             <span className={`file-type-icon type-${file.category.toLowerCase()}`}>
-              <Icon name={categoryIcon(file.category)} size={19} />
+              <Icon name={categoryIcon(file.category as any)} size={19} />
             </span>
             <span className="app-details">
               <strong>{file.name}</strong>
               <small>{file.path}</small>
             </span>
-            <span className="modified-date">{file.modified}</span>
-            <span className="app-size">{formatSize(file.sizeMb)}</span>
-            <span className="row-arrow">
-              <Icon name="chevron" size={16} />
+            <span className="modified-date">{new Date(file.modified_at * 1000).toLocaleString()}</span>
+            <span className="app-size">{formatBytes(file.size_bytes)}</span>
+            <span className="row-arrow" style={{ display: "flex", gap: "6px", opacity: 1 }}>
+              {file.protected && (
+                <button
+                  type="button"
+                  title="Protected"
+                  disabled
+                  style={{ border: "none", background: "transparent", cursor: "not-allowed", color: "#a46e68" }}
+                >
+                  <Icon name="lock" size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                title="Show in folder"
+                onClick={() => revealInFolder(file.path)}
+                style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit" }}
+              >
+                <Icon name="folder" size={16} />
+              </button>
+              <button
+                type="button"
+                title="Delete"
+                disabled={file.protected}
+                onClick={async () => {
+                  if (file.protected) return;
+                  await deleteLargeFile(file.path);
+                  load();
+                }}
+                style={{ border: "none", background: "transparent", cursor: file.protected ? "not-allowed" : "pointer", color: file.protected ? "#b9c4bf" : "inherit" }}
+              >
+                <Icon name="trash" size={16} />
+              </button>
             </span>
-          </button>
+          </div>
         ))}
         {visibleFiles.length === 0 && (
           <div className="empty-state">
@@ -174,47 +213,80 @@ export function LargeFilesView() {
           </div>
         )}
       </div>
-
-      <footer className="action-bar">
-        <div className="selection-copy">
-          <span className="selection-icon">
-            <Icon name="trash" size={18} />
-          </span>
-          <div>
-            <strong>
-              {selected.length} {selected.length === 1 ? "item" : "items"} selected
-            </strong>
-            <span>
-              {selected.length ? `${formatSize(selectedMb)} will be freed` : "Select files to remove"}
-            </span>
+      ) : (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, padding: 16 }}>
+        {visibleFiles.map((file, index) => (
+          <div key={`${file.path}-${index}`} style={{ border: "1px solid #e4e9e7", borderRadius: 12, padding: 12, background: "#fff" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span className={`file-type-icon type-${file.category.toLowerCase()}`}>
+                <Icon name={categoryIcon(file.category as any)} size={19} />
+              </span>
+              <strong style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</strong>
+            </div>
+            <div style={{ fontSize: 10, color: "#8f9a96", marginBottom: 8 }}>{new Date(file.modified_at * 1000).toLocaleDateString()}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+              {file.size_bytes >= 1024 * 1024 * 1024
+                ? `${(file.size_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                : file.size_bytes >= 1024 * 1024
+                ? `${(file.size_bytes / (1024 * 1024)).toFixed(2)} MB`
+                : `${file.size_bytes} B`}
+            </div>
+            {file.protected && (
+              <button
+                type="button"
+                title="Protected"
+                disabled
+                style={{ border: "none", background: "transparent", cursor: "not-allowed", color: "#a46e68", marginRight: 8 }}
+              >
+                <Icon name="lock" size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              title="Show in folder"
+              onClick={() => revealInFolder(file.path)}
+              style={{ border: "none", background: "transparent", cursor: "pointer", color: "#527666", marginRight: 8 }}
+            >
+              <Icon name="folder" size={16} />
+            </button>
+            <button
+              type="button"
+              title="Delete"
+              disabled={file.protected}
+              onClick={async () => {
+                if (file.protected) return;
+                await deleteLargeFile(file.path);
+                load();
+              }}
+              style={{ border: "none", background: "transparent", cursor: file.protected ? "not-allowed" : "pointer", color: file.protected ? "#b9c4bf" : "#527666" }}
+            >
+              <Icon name="trash" size={16} />
+            </button>
           </div>
-        </div>
-        {message && <p className="success-message">{message}</p>}
+        ))}
+        {visibleFiles.length === 0 && (
+          <div className="empty-state">
+            <Icon name="search" size={24} />
+            <strong>No files found</strong>
+            <span>Try another category or search.</span>
+          </div>
+        )}
+      </div>
+      )}
+
+      <div className="toolbar">
+        <p>
+          <strong>{visibleFiles.length} files larger than 5 MB</strong>
+        </p>
         <button
           className="uninstall-button"
-          disabled={!selected.length}
-          onClick={() => setConfirming(true)}
           type="button"
+          onClick={load}
+          style={{ marginLeft: "auto" }}
         >
-          <Icon name="trash" size={17} />
-          Move to Trash
+          Rescan
         </button>
-      </footer>
-
-      {confirming && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-            <h2 id="confirm-title">Move selected items to Trash?</h2>
-            <p>
-              {selected.length} items will be moved to Trash. This will recover {formatSize(selectedMb)} of storage.
-            </p>
-            <div className="modal-actions">
-              <button onClick={() => setConfirming(false)} type="button">Cancel</button>
-              <button className="confirm-button" onClick={removeFiles} type="button">Move to Trash</button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </>
   );
 }

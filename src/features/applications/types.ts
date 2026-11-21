@@ -38,3 +38,37 @@ export type TrashItem = {
   is_dir: boolean;
   modified_at: string;
 };
+
+export type LargeFile = {
+  name: string;
+  path: string;
+  size_bytes: number;
+  modified_at: number;
+  category: string;
+  protected: boolean;
+};
+
+export type PermissionStatus = {
+  name: string;
+  description: string;
+  granted: boolean;
+};
+
+export type SystemInfo = {
+  user_name: string;
+  device_name: string;
+  hostname: string;
+  ip_address: string;
+  mac_address: string;
+  default_gateway: string;
+  dns_server: string;
+  os_name: string;
+  os_version: string;
+  os_build: string;
+  architecture: string;
+  kernel_version: string;
+  total_storage_gb: number;
+  free_storage_gb: number;
+  ram_gb: number;
+  cpu_cores: number;
+};

@@ -18,7 +18,7 @@ export function Sidebar() {
           <Icon name="sparkles" size={20} />
         </div>
         <div>
-          <strong>Destox Uninstall</strong>
+          <strong>Destox</strong>
           <span>Mac cleaner</span>
         </div>
       </div>
@@ -60,6 +60,14 @@ export function Sidebar() {
           Trash Bin
           <span>{trashCount}</span>
         </button>
+        <button
+          className={`nav-item ${active === "/permissions" ? "active" : ""}`}
+          type="button"
+          onClick={() => navigate("/permissions")}
+        >
+          <Icon name="settings" />
+          Permissions
+        </button>
       </nav>
 
       <div className="storage-card">
@@ -82,7 +90,11 @@ export function Sidebar() {
           <Icon name="settings" />
           Preferences
         </button>
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${active === "/about" ? "active" : ""}`}
+          type="button"
+          onClick={() => navigate("/about")}
+        >
           <Icon name="info" />
           About
         </button>

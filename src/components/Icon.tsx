@@ -7,6 +7,9 @@ import {
   Image,
   Video,
   ChevronRight,
+  Cloud,
+  Lock,
+  List,
   Clock,
   Info,
   LayoutGrid,
@@ -26,8 +29,11 @@ export type IconName =
   | "folder"
   | "clock"
   | "grid"
+  | "list"
   | "image"
   | "info"
+  | "weather"
+  | "lock"
   | "search"
   | "settings"
   | "sparkles"
@@ -44,8 +50,11 @@ const icons: Record<IconName, React.ComponentType<{ size?: number; strokeWidth?:
   folder: Folder,
   clock: Clock,
   grid: LayoutGrid,
+  list: List,
   image: Image,
   info: Info,
+  weather: Cloud,
+  lock: Lock,
   search: Search,
   settings: Settings,
   sparkles: Sparkles,

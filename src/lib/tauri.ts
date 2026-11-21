@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem } from "../features/applications/types";
+import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo } from "../features/applications/types";
 
 export async function getStorageInfo(): Promise<StorageInfo> {
   return invoke<StorageInfo>("get_storage_info");
@@ -43,4 +43,28 @@ export async function recoverTrashItem(path: string): Promise<string> {
   return invoke("recover_trash_item", { path });
 }
 
-export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem };
+export async function getLargeFiles(minSizeMb?: number): Promise<LargeFile[]> {
+  return invoke("get_large_files", { minSizeMb });
+}
+
+export async function revealInFolder(path: string): Promise<void> {
+  return invoke("reveal_in_folder", { path });
+}
+
+export async function deleteLargeFile(path: string): Promise<void> {
+  return invoke("delete_large_file", { path });
+}
+
+export async function getPermissions(): Promise<PermissionStatus[]> {
+  return invoke("get_permissions");
+}
+
+export async function openPermissionSettings(): Promise<void> {
+  return invoke("open_permission_settings");
+}
+
+export async function getSystemInfo(): Promise<SystemInfo> {
+  return invoke("get_system_info");
+}
+
+export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo };

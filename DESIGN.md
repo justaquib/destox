@@ -4,7 +4,7 @@
 ```
 src/
   components/        # Reusable UI (Icon, Sidebar)
-  features/          # Feature modules (applications, ...)
+  features/          # Feature modules (applications, trash, permissions)
   lib/               # Tauri invoke wrappers
   styles/            # Global CSS
 src-tauri/src/
@@ -34,3 +34,15 @@ Use `lucide-react` via `components/Icon.tsx`. Do not add custom SVGs.
 
 ## File Size Rule
 - No source file should exceed 404 lines. Split into modules/components if needed.
+
+
+## Git Rule
+- Do not push code to the repository unless explicitly instructed to push.
+
+
+## Build Rule
+- Do not bundle the app without explicit user approval.
+
+
+## Change Rule
+- Do not revert user changes. Only update or extend existing code when needed.
