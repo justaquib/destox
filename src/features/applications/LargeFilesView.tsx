@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Icon } from "../../components/Icon";
 import type { IconName } from "../../components/Icon";
-import "../../styles/LargeFileStyle.css";
 
 type Category = "All" | "Images" | "Videos" | "Documents" | "Folders" | "Temporary" | "Cache";
 
