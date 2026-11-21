@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { CloudSun } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { AllAppsView } from "./features/applications/AllAppsView";
@@ -8,11 +8,14 @@ import { LargeFilesView } from "./features/applications/LargeFilesView";
 import { TrashBinView } from "./features/trash/TrashBinView";
 import { PermissionsView } from "./features/permissions/PermissionsView";
 import { AboutView } from "./features/about/AboutView";
+import { PortsView } from "./features/ports/PortsView";
 import { useAppStore } from "./store/appStore";
+import { getPermissions } from "./lib/tauri";
 import { getSystemInfo } from "./lib/tauri";
 import { getLocalWeather, WEATHER_ENABLED_KEY } from "./lib/weather";
 
 function AppShell() {
+  const navigate = useNavigate();
   const store = useAppStore();
   const { apps, query, sort, message, confirming, installed, trash, loading } = store;
   const [userName, setUserName] = useState("there");
@@ -34,6 +37,7 @@ function AppShell() {
   useEffect(() => {
     store.fetchAll();
     getSystemInfo().then((info) => setUserName(info.user_name || "there")).catch(() => undefined);
+    getPermissions().then((perms) => { if (perms.some((perm) => !perm.granted)) navigate("/permissions"); }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -103,6 +107,7 @@ function AppShell() {
             <Route path="/large-files" element={<LargeFilesView />} />
             <Route path="/permissions" element={<PermissionsView />} />
             <Route path="/about" element={<AboutView />} />
+            <Route path="/ports" element={<PortsView />} />
             <Route
               path="/trash"
               element={

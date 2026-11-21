@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo } from "../features/applications/types";
+import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo } from "../features/applications/types";
 
 export async function getStorageInfo(): Promise<StorageInfo> {
   return invoke<StorageInfo>("get_storage_info");
@@ -67,4 +67,12 @@ export async function getSystemInfo(): Promise<SystemInfo> {
   return invoke("get_system_info");
 }
 
-export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo };
+export async function getPorts(): Promise<PortInfo[]> {
+  return invoke("get_ports");
+}
+
+export async function killPort(pid: number): Promise<void> {
+  return invoke("kill_port", { pid });
+}
+
+export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo };

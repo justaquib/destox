@@ -24,7 +24,7 @@ export function RecentlyInstalledView({ installed }: Props) {
         {installed.map((item, index) => (
           <div className="app-row" key={`${item.name}-${index}`}>
             <span />
-            <span className={`app-icon ${index % 2 === 0 ? "figma-icon" : "notion-icon"}`}>
+            <span className="app-icon">
               {item.icon && item.icon.startsWith("data:") ? (
                 <img src={item.icon} alt="" style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }} />
               ) : (

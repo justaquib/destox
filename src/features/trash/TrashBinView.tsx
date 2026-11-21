@@ -35,7 +35,7 @@ export function TrashBinView({ trash, onRescan, onDelete, onRecover }: Props) {
         {trash.map((item, index) => (
           <div className="app-row" key={`${item.path}-${index}`}>
             <span />
-            <span className={`app-icon ${item.is_dir ? "figma-icon" : "notion-icon"}`}>
+            <span className="app-icon">
               {item.name.charAt(0).toUpperCase()}
             </span>
             <span className="app-details">

@@ -20,6 +20,8 @@ pub fn run() {
             commands::large_files::delete_large_file,
             commands::permissions::get_permissions,
             commands::permissions::open_permission_settings,
+            commands::ports::get_ports,
+            commands::ports::kill_port,
             commands::system::get_system_info
         ])
         .run(tauri::generate_context!())

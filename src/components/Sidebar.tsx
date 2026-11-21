@@ -68,6 +68,14 @@ export function Sidebar() {
           <Icon name="settings" />
           Permissions
         </button>
+        <button
+          className={`nav-item ${active === "/ports" ? "active" : ""}`}
+          type="button"
+          onClick={() => navigate("/ports")}
+        >
+          <Icon name="network" />
+          Ports
+        </button>
       </nav>
 
       <div className="storage-card">

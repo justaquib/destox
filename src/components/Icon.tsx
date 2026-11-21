@@ -1,5 +1,6 @@
 import {
   AppWindow,
+  Network,
   Archive,
   File,
   FileText,
@@ -34,6 +35,7 @@ export type IconName =
   | "info"
   | "weather"
   | "lock"
+  | "network"
   | "search"
   | "settings"
   | "sparkles"
@@ -55,6 +57,7 @@ const icons: Record<IconName, React.ComponentType<{ size?: number; strokeWidth?:
   info: Info,
   weather: Cloud,
   lock: Lock,
+  network: Network,
   search: Search,
   settings: Settings,
   sparkles: Sparkles,

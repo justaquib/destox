@@ -63,7 +63,7 @@ export function PermissionsView() {
         {permissions.map((perm, index) => (
           <div className="app-row" key={`${perm.name}-${index}`}>
             <span />
-            <span className="app-icon" style={{ color: "#557b6d", background: "#e3ece8" }}>
+            <span className="app-icon">
               <Icon name="settings" size={18} />
             </span>
             <span className="app-details">
@@ -110,7 +110,7 @@ export function PermissionsView() {
         {!loading && (
           <div className="app-row">
             <span />
-            <span className="app-icon" style={{ color: "#557b6d", background: "#e3ece8" }}>
+            <span className="app-icon">
               <Icon name="weather" size={18} />
             </span>
             <span className="app-details">

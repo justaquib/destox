@@ -65,7 +65,7 @@ export function AllAppsView({
                 </svg>
               )}
             </span>
-            <span className={`app-icon ${app.iconClass}`}>
+            <span className="app-icon">
               {app.icon.startsWith("data:") ? (
                 <img src={app.icon} alt="" style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }} />
               ) : (

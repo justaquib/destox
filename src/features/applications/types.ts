@@ -12,7 +12,6 @@ export type AppItem = {
   size: string;
   sizeMb: number;
   icon: string;
-  iconClass: string;
   path: string;
   selected: boolean;
 };
@@ -71,4 +70,11 @@ export type SystemInfo = {
   free_storage_gb: number;
   ram_gb: number;
   cpu_cores: number;
+};
+
+export type PortInfo = {
+  port: number;
+  protocol: string;
+  process: string;
+  pid: number;
 };

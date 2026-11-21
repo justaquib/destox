@@ -39,15 +39,6 @@ interface AppState {
   revealLargeFile: (path: string) => Promise<void>;
 }
 
-const iconClasses = [
-  "figma-icon",
-  "notion-icon",
-  "slack-icon",
-  "spotify-icon",
-  "arc-icon",
-  "linear-icon",
-];
-
 export const useAppStore = create<AppState>((set, get) => ({
   apps: [],
   storage: null,
@@ -81,7 +72,6 @@ export const useAppStore = create<AppState>((set, get) => ({
             : `${app.size_mb} MB`,
         sizeMb: app.size_mb,
         icon: app.icon ?? app.name.charAt(0).toUpperCase(),
-        iconClass: iconClasses[index % iconClasses.length],
         path: app.path,
         selected: false,
       })),
