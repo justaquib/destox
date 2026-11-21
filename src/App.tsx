@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { AllAppsView } from "./features/applications/AllAppsView";
 import { RecentlyInstalledView } from "./features/applications/RecentlyInstalledView";
+import { LargeFilesView } from "./features/applications/LargeFilesView";
 import { TrashBinView } from "./features/trash/TrashBinView";
 import { useAppStore } from "./store/appStore";
 
@@ -70,6 +71,7 @@ function AppShell() {
               path="/recently-installed"
               element={<RecentlyInstalledView installed={installed} />}
             />
+            <Route path="/large-files" element={<LargeFilesView />} />
             <Route
               path="/trash"
               element={

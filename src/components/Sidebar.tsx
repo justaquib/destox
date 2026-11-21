@@ -43,9 +43,13 @@ export function Sidebar() {
           Recently Installed
           <span>{installedCount}</span>
         </button>
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${active === "/large-files" ? "active" : ""}`}
+          type="button"
+          onClick={() => navigate("/large-files")}
+        >
           <Icon name="apps" />
-          Large Applications
+          Large Files
         </button>
         <button
           className={`nav-item ${active === "/trash" ? "active" : ""}`}
