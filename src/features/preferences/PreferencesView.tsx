@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 const KEYS = {
   minSize: "destox.minLargeFileSizeMb",
+  minFolderSize: "destox.minLargeFolderSizeMb",
   scanHidden: "destox.scanHidden",
   confirmDelete: "destox.confirmDelete",
   autoScan: "destox.autoScan",
@@ -17,6 +18,7 @@ function usePref(key: string, initial: string) {
 
 export function PreferencesView() {
   const [minSize, setMinSize] = usePref(KEYS.minSize, "5");
+  const [minFolderSize, setMinFolderSize] = usePref(KEYS.minFolderSize, "10");
   const [scanHidden, setScanHidden] = usePref(KEYS.scanHidden, "false");
   const [confirmDelete, setConfirmDelete] = usePref(KEYS.confirmDelete, "true");
   const [autoScan, setAutoScan] = usePref(KEYS.autoScan, "true");
@@ -41,15 +43,33 @@ export function PreferencesView() {
             <input
               type="number"
               min={1}
+              step={1}
+              aria-label="Minimum large file size in megabytes"
               value={minSize}
               onChange={(e) => setMinSize(e.target.value)}
               style={{ width: 80, padding: "6px 8px", border: "1px solid #dfe5e2", borderRadius: 6 }}
             />
           </div>
 
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", border: "1px solid #e4e9e7", borderRadius: 10, background: "#fff" }}>
+            <div>
+              <strong style={{ display: "block", fontSize: 12 }}>Minimum large folder size (MB)</strong>
+              <small style={{ color: "#8a9691", fontSize: 10 }}>Folders smaller than this are omitted from the Folders view.</small>
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              aria-label="Minimum large folder size in megabytes"
+              value={minFolderSize}
+              onChange={(e) => setMinFolderSize(e.target.value)}
+              style={{ width: 80, padding: "6px 8px", border: "1px solid #dfe5e2", borderRadius: 6 }}
+            />
+          </div>
+
           {[
             { label: "Scan hidden files", desc: "Include dotfiles when scanning.", key: "scanHidden", value: scanHidden, set: setScanHidden },
-            { label: "Confirm before delete", desc: "Show confirmation dialog before deleting.", key: "confirmDelete", value: confirmDelete, set: setConfirmDelete },
+            { label: "Confirm before deleting files", desc: "Ask before permanently deleting a file from Large Files.", key: "confirmDelete", value: confirmDelete, set: setConfirmDelete },
             { label: "Auto-scan on open", desc: "Automatically scan when opening Large Files.", key: "autoScan", value: autoScan, set: setAutoScan },
           ].map((item) => (
             <div key={item.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", border: "1px solid #e4e9e7", borderRadius: 10, background: "#fff" }}>

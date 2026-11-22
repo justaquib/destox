@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 import { CloudSun } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { AllAppsView } from "./features/applications/AllAppsView";
@@ -14,11 +15,17 @@ import { useAppStore } from "./store/appStore";
 import { getPermissions } from "./lib/tauri";
 import { getSystemInfo } from "./lib/tauri";
 import { getLocalWeather, WEATHER_ENABLED_KEY } from "./lib/weather";
+import type { LargeScanProgress } from "./features/applications/types";
 
 function AppShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const store = useAppStore();
+  const setLargeScanProgress = useAppStore((state) => state.setLargeScanProgress);
   const { apps, query, sort, message, confirming, installed, trash, loading } = store;
+  const { largeScanProgress, scanInBackground } = store;
+  const [splashVisible, setSplashVisible] = useState(true);
+  const initialLoadStarted = useRef(false);
   const [userName, setUserName] = useState("there");
   const [weather, setWeather] = useState<string | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -36,11 +43,29 @@ function AppShell() {
       : `${selected.reduce((t, a) => t + a.sizeMb, 0)} MB`;
 
   useEffect(() => {
-    store.fetchAll();
+    if (initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
+    const minimumSplash = new Promise<void>((resolve) => window.setTimeout(resolve, 700));
+    void Promise.allSettled([store.fetchAll(), minimumSplash]).then(() => setSplashVisible(false));
     getSystemInfo().then((info) => setUserName(info.user_name || "there")).catch(() => undefined);
     getPermissions().then((perms) => { if (perms.some((perm) => !perm.granted)) navigate("/permissions"); }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen<LargeScanProgress>("large-scan-progress", ({ payload }) => {
+      setLargeScanProgress(payload);
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [setLargeScanProgress]);
 
   const loadWeather = () => {
     if (localStorage.getItem(WEATHER_ENABLED_KEY) !== "true") {
@@ -109,7 +134,7 @@ function AppShell() {
             />
             <Route
               path="/recently-installed"
-              element={<RecentlyInstalledView installed={installed} />}
+              element={<RecentlyInstalledView installed={installed} onDelete={store.uninstallRecentlyInstalled} />}
             />
             <Route path="/large-files" element={<LargeFilesView />} />
             <Route path="/permissions" element={<PermissionsView />} />
@@ -131,12 +156,24 @@ function AppShell() {
         </div>
       </section>
 
-      {loading && (
-        <div className="modal-backdrop" role="presentation" style={{ background: "rgba(232,238,235,0.92)", backdropFilter: "blur(8px)" }}>
+      {(splashVisible || loading) && (
+        <div className="modal-backdrop splash-screen" role="dialog" aria-modal="true" aria-label="Loading Destox" style={{ background: "rgba(232,238,235,0.96)", backdropFilter: "blur(10px)" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
             <img src="/icon.png" alt="Destox" style={{ width: 96, height: 96, borderRadius: 24, objectFit: "cover", boxShadow: "0 12px 32px rgba(46,66,59,0.18)" }} />
             <h2 style={{ margin: 0, color: "#26332f", fontSize: 24, fontWeight: 680 }}>Destox</h2>
             <p style={{ margin: 0, color: "#8a9691", fontSize: 12 }}>Loading your Mac…</p>
+          </div>
+        </div>
+      )}
+
+      {largeScanProgress && !largeScanProgress.complete && (location.pathname !== "/large-files" || scanInBackground) && (
+        <div className="scan-toast" role="status" aria-live="polite">
+          <span className="scan-toast-spinner" aria-hidden="true" />
+          <div>
+            <strong>Large file scan running</strong>
+            <span>{largeScanProgress.stage === "folders"
+              ? `${largeScanProgress.scanned_entries.toLocaleString()} entries checked · ${formatBytes(largeScanProgress.folder_size_bytes)} in folders`
+              : `${largeScanProgress.scanned_entries.toLocaleString()} entries checked · ${largeScanProgress.files_found.toLocaleString()} large files found`}</span>
           </div>
         </div>
       )}
@@ -165,6 +202,12 @@ function AppShell() {
       )}
     </main>
   );
+}
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${bytes.toLocaleString()} B`;
 }
 
 export default function App() {

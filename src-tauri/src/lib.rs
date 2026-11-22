@@ -7,6 +7,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::storage::get_storage_info,
             commands::apps::get_installed_apps,
+            commands::apps::get_app_details,
             commands::apps::get_recently_installed,
             commands::apps::uninstall_apps,
             commands::history::get_recently_deleted,
@@ -16,7 +17,9 @@ pub fn run() {
             commands::trash::delete_trash_item,
             commands::trash::recover_trash_item,
             commands::large_files::get_large_files,
+            commands::large_files::get_large_folders,
             commands::large_files::reveal_in_folder,
+            commands::large_files::get_file_preview,
             commands::large_files::delete_large_file,
             commands::permissions::get_permissions,
             commands::permissions::open_permission_settings,
