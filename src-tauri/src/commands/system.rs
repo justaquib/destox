@@ -99,3 +99,9 @@ pub fn get_system_info() -> Result<SystemInfo, String> {
         cpu_cores,
     })
 }
+
+
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}

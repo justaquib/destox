@@ -30,7 +30,10 @@ export function AllAppsView({
         <p>
           <strong>{apps.length} applications</strong>
           <span>·</span>
-          12.8 GB total
+          {(() => {
+            const mb = apps.reduce((t, a) => t + a.sizeMb, 0);
+            return mb > 1024 ? `${(mb / 1024).toFixed(2)} GB total` : `${mb} MB total`;
+          })()}
         </p>
         <label className="sort-select">
           Sort by:

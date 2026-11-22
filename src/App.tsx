@@ -8,6 +8,7 @@ import { LargeFilesView } from "./features/applications/LargeFilesView";
 import { TrashBinView } from "./features/trash/TrashBinView";
 import { PermissionsView } from "./features/permissions/PermissionsView";
 import { AboutView } from "./features/about/AboutView";
+import { PreferencesView } from "./features/preferences/PreferencesView";
 import { PortsView } from "./features/ports/PortsView";
 import { useAppStore } from "./store/appStore";
 import { getPermissions } from "./lib/tauri";
@@ -95,7 +96,13 @@ function AppShell() {
                   sort={sort}
                   setSort={store.setSort}
                   onToggle={store.toggleApp}
-                  onUninstall={() => store.setConfirming(true)}
+                  onUninstall={() => {
+                    if (localStorage.getItem("destox.confirmDelete") === "false") {
+                      store.uninstallSelected();
+                    } else {
+                      store.setConfirming(true);
+                    }
+                  }}
                   message={message}
                 />
               }
@@ -107,6 +114,7 @@ function AppShell() {
             <Route path="/large-files" element={<LargeFilesView />} />
             <Route path="/permissions" element={<PermissionsView />} />
             <Route path="/about" element={<AboutView />} />
+            <Route path="/preferences" element={<PreferencesView />} />
             <Route path="/ports" element={<PortsView />} />
             <Route
               path="/trash"
@@ -124,10 +132,11 @@ function AppShell() {
       </section>
 
       {loading && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="confirm-modal" role="dialog" aria-modal="true">
-            <h2>Loading…</h2>
-            <p>Scanning your Mac for apps and files.</p>
+        <div className="modal-backdrop" role="presentation" style={{ background: "rgba(232,238,235,0.92)", backdropFilter: "blur(8px)" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <img src="/icon.png" alt="Destox" style={{ width: 96, height: 96, borderRadius: 24, objectFit: "cover", boxShadow: "0 12px 32px rgba(46,66,59,0.18)" }} />
+            <h2 style={{ margin: 0, color: "#26332f", fontSize: 24, fontWeight: 680 }}>Destox</h2>
+            <p style={{ margin: 0, color: "#8a9691", fontSize: 12 }}>Loading your Mac…</p>
           </div>
         </div>
       )}

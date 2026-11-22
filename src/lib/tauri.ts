@@ -43,8 +43,8 @@ export async function recoverTrashItem(path: string): Promise<string> {
   return invoke("recover_trash_item", { path });
 }
 
-export async function getLargeFiles(minSizeMb?: number): Promise<LargeFile[]> {
-  return invoke("get_large_files", { minSizeMb });
+export async function getLargeFiles(minSizeMb?: number, scanHidden?: boolean): Promise<LargeFile[]> {
+  return invoke("get_large_files", { minSizeMb, scanHidden });
 }
 
 export async function revealInFolder(path: string): Promise<void> {
@@ -65,6 +65,10 @@ export async function openPermissionSettings(): Promise<void> {
 
 export async function getSystemInfo(): Promise<SystemInfo> {
   return invoke("get_system_info");
+}
+
+export async function getAppVersion(): Promise<string> {
+  return invoke("get_app_version");
 }
 
 export async function getPorts(): Promise<PortInfo[]> {

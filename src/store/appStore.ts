@@ -53,12 +53,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchAll: async () => {
     set({ loading: true });
-    const [storage, apps, installed, trash, largeFiles] = await Promise.all([
+    const [storage, apps, installed, trash] = await Promise.all([
       getStorageInfo().catch(() => null),
       getInstalledApps().catch(() => []),
       getRecentlyInstalled().catch(() => []),
       getTrashItems().catch(() => []),
-      getLargeFiles().catch(() => []),
     ]);
     set({
       storage,
@@ -77,7 +76,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       })),
       installed,
       trash,
-      largeFiles,
       loading: false,
     });
   },

@@ -14,8 +14,8 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">
-          <Icon name="sparkles" size={20} />
+        <div className="brand-mark" style={{ background: "transparent", boxShadow: "none", padding: 0 }}>
+          <img src="/icon.png" alt="Destox" style={{ width: 38, height: 38, borderRadius: 12, objectFit: "cover" }} />
         </div>
         <div>
           <strong>Destox</strong>
@@ -94,7 +94,11 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-bottom">
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${active === "/preferences" ? "active" : ""}`}
+          type="button"
+          onClick={() => navigate("/preferences")}
+        >
           <Icon name="settings" />
           Preferences
         </button>

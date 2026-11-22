@@ -22,7 +22,8 @@ pub fn run() {
             commands::permissions::open_permission_settings,
             commands::ports::get_ports,
             commands::ports::kill_port,
-            commands::system::get_system_info
+            commands::system::get_system_info,
+            commands::system::get_app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

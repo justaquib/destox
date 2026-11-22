@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Activity, Cpu, HardDrive, MemoryStick, Monitor, Network, Server, Wifi } from "lucide-react";
-import { getSystemInfo } from "../../lib/tauri";
+import { getSystemInfo, getAppVersion } from "../../lib/tauri";
 import type { SystemInfo } from "../../features/applications/types";
 
 export function AboutView() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
+  const [version, setVersion] = useState("0.1.0");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -13,6 +14,7 @@ export function AboutView() {
     setError(false);
     try {
       setInfo(await getSystemInfo());
+      setVersion(await getAppVersion());
     } catch {
       setError(true);
     } finally {
@@ -44,7 +46,7 @@ export function AboutView() {
             <div className="device-copy">
               <span className="device-label">YOUR DEVICE</span>
               <h3>{info.device_name}</h3>
-              <p>{info.os_name} {info.os_version} <span className="device-dot" /> Destox 0.1.0</p>
+              <p>{info.os_name} {info.os_version} <span className="device-dot" /> Destox {version}</p>
             </div>
             <div className="device-status"><Activity size={14} /> System healthy</div>
           </article>
@@ -69,7 +71,7 @@ export function AboutView() {
                 </article>
               ))}
             </div>
-            <div className="about-footer"><span className="about-footer-mark">D</span><span>Destox keeps your Mac tidy, with care.</span><span className="version-tag">VERSION 0.1.0</span></div>
+            <div className="about-footer"><span className="about-footer-mark">D</span><span>Destox keeps your Mac tidy, with care.</span><span className="version-tag">VERSION {version}</span></div>
           </>
         )}
       </div>

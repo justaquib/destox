@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../components/Icon";
 import type { IconName } from "../../components/Icon";
-import { getLargeFiles, revealInFolder, deleteLargeFile } from "../../lib/tauri";
+import { getLargeFiles, revealInFolder, deleteLargeFile, getPermissions } from "../../lib/tauri";
+import { useNavigate } from "react-router-dom";
 import type { LargeFile } from "../../features/applications/types";
 
 type Category = "All" | "Images" | "Videos" | "Documents" | "Folders" | "Temporary" | "Cache" | "Other";
@@ -43,16 +44,30 @@ function categoryIcon(category: FileItem["category"]): IconName {
 export function LargeFilesView() {
   const [files, setFiles] = useState<LargeFile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [confirming, setConfirming] = useState(false);
+  const [pendingPath, setPendingPath] = useState("");
 
+  const navigate = useNavigate();
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await getLargeFiles(5);
+      const perms = await getPermissions();
+      const fullDisk = perms.find((p) => p.name === "Full Disk Access");
+      if (!fullDisk?.granted) {
+        setPermissionGranted(false);
+        setFiles([]);
+        return;
+      }
+      setPermissionGranted(true);
+      const minSize = Number(localStorage.getItem("destox.minLargeFileSizeMb") ?? "5");
+      const scanHidden = localStorage.getItem("destox.scanHidden") === "true";
+      const data = await getLargeFiles(minSize, scanHidden);
       setFiles(data);
     } catch (e) {
       setError(String(e));
@@ -124,6 +139,15 @@ export function LargeFilesView() {
         </div>
       </div>
 
+      {permissionGranted === false && (
+        <div className="empty-state">
+          <strong>Full Disk Access required</strong>
+          <span>Grant Full Disk Access in Permissions to scan large files.</span>
+          <button type="button" onClick={() => navigate("/permissions")} style={{ marginTop: 12, border: "none", background: "#527666", color: "#fff", padding: "8px 14px", borderRadius: 8, cursor: "pointer" }}>
+            Open Permissions
+          </button>
+        </div>
+      )}
       {loading && <div className="empty-state"><strong>Scanning files…</strong></div>}
       {error && <div className="empty-state"><strong>Error</strong><span>{error}</span></div>}
       <section className="category-section" aria-label="File categories">
@@ -195,8 +219,13 @@ export function LargeFilesView() {
                 disabled={file.protected}
                 onClick={async () => {
                   if (file.protected) return;
-                  await deleteLargeFile(file.path);
-                  load();
+                  if (localStorage.getItem("destox.confirmDelete") === "false") {
+                    await deleteLargeFile(file.path);
+                    load();
+                  } else {
+                    setPendingPath(file.path);
+                    setConfirming(true);
+                  }
                 }}
                 style={{ border: "none", background: "transparent", cursor: file.protected ? "not-allowed" : "pointer", color: file.protected ? "#b9c4bf" : "inherit" }}
               >
@@ -255,8 +284,13 @@ export function LargeFilesView() {
               disabled={file.protected}
               onClick={async () => {
                 if (file.protected) return;
-                await deleteLargeFile(file.path);
-                load();
+                if (localStorage.getItem("destox.confirmDelete") === "false") {
+                  await deleteLargeFile(file.path);
+                  load();
+                } else {
+                  setPendingPath(file.path);
+                  setConfirming(true);
+                }
               }}
               style={{ border: "none", background: "transparent", cursor: file.protected ? "not-allowed" : "pointer", color: file.protected ? "#b9c4bf" : "#527666" }}
             >
@@ -287,6 +321,30 @@ export function LargeFilesView() {
           Rescan
         </button>
       </div>
-    </>
+    
+      {confirming && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h2 id="confirm-title">Delete file permanently?</h2>
+            <p>This file will be deleted permanently.</p>
+            <div className="modal-actions">
+              <button onClick={() => setConfirming(false)} type="button">Cancel</button>
+              <button
+                className="confirm-button"
+                onClick={async () => {
+                  await deleteLargeFile(pendingPath);
+                  setConfirming(false);
+                  setPendingPath("");
+                  load();
+                }}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</>
   );
 }

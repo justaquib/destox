@@ -46,7 +46,7 @@ fn is_protected(path: &Path) -> bool {
     false
 }
 
-fn scan_dir(dir: &Path, min_size: u64, depth: usize, out: &mut Vec<LargeFile>, seen: &mut HashSet<(u64, u64)>) {
+fn scan_dir(dir: &Path, min_size: u64, depth: usize, scan_hidden: bool, out: &mut Vec<LargeFile>, seen: &mut HashSet<(u64, u64)>) {
     if depth == 0 || !dir.exists() {
         return;
     }
@@ -60,7 +60,7 @@ fn scan_dir(dir: &Path, min_size: u64, depth: usize, out: &mut Vec<LargeFile>, s
             Ok(n) => n,
             Err(_) => continue,
         };
-        if name.starts_with('.') {
+        if !scan_hidden && name.starts_with('.') {
             continue;
         }
         let meta = match path.metadata() {
@@ -68,7 +68,7 @@ fn scan_dir(dir: &Path, min_size: u64, depth: usize, out: &mut Vec<LargeFile>, s
             Err(_) => continue,
         };
         if meta.is_dir() {
-            scan_dir(&path, min_size, depth - 1, out, seen);
+            scan_dir(&path, min_size, depth - 1, scan_hidden, out, seen);
         } else if meta.is_file() && meta.len() >= min_size {
             let key = (meta.dev(), meta.ino());
             if !seen.insert(key) {
@@ -94,15 +94,16 @@ fn scan_dir(dir: &Path, min_size: u64, depth: usize, out: &mut Vec<LargeFile>, s
 }
 
 #[tauri::command]
-pub fn get_large_files(min_size_mb: Option<u64>) -> Result<Vec<LargeFile>, String> {
+pub fn get_large_files(min_size_mb: Option<u64>, scan_hidden: Option<bool>) -> Result<Vec<LargeFile>, String> {
     let min_size = min_size_mb.unwrap_or(5) * 1024 * 1024;
+    let scan_hidden = scan_hidden.unwrap_or(false);
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
     let home = PathBuf::from(home);
     let mut out = Vec::new();
     let mut seen = HashSet::new();
-    scan_dir(&home, min_size, 6, &mut out, &mut seen);
+    scan_dir(&home, min_size, 6, scan_hidden, &mut out, &mut seen);
     // Also scan common app locations
-    scan_dir(&PathBuf::from("/Applications"), min_size, 2, &mut out, &mut seen);
+    scan_dir(&PathBuf::from("/Applications"), min_size, 2, scan_hidden, &mut out, &mut seen);
     out.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
     out.truncate(300);
     Ok(out)
