@@ -1,0 +1,96 @@
+name: Publish Destox release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-macos:
+    name: Build macOS ${{ matrix.arch }} update
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - arch: Apple Silicon
+            args: --target aarch64-apple-darwin
+          - arch: Intel
+            args: --target x86_64-apple-darwin
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Match tag to app version
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const packageVersion = require('./package.json').version;
+          const tauriVersion = require('./src-tauri/tauri.conf.json').version;
+          const cargoVersion = fs.readFileSync('./src-tauri/Cargo.toml', 'utf8').match(/^version = "([^"]+)"/m)?.[1];
+          const versionsMatch = packageVersion === tauriVersion && packageVersion === cargoVersion;
+          if (!versionsMatch || process.env.GITHUB_REF_NAME !== `v${packageVersion}`) {
+            console.error(`Release tag ${process.env.GITHUB_REF_NAME} must match package, Tauri, and Cargo versions (v${packageVersion}, v${tauriVersion}, v${cargoVersion}).`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Require updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Add the Tauri private key as the TAURI_SIGNING_PRIVATE_KEY repository secret."
+            exit 1
+          fi
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Destox v__VERSION__
+          releaseBody: See the release notes below for changes in this version.
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          args: ${{ matrix.args }}
+
+  publish-release:
+    name: Publish completed release
+    needs: publish-macos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish GitHub Release after both architectures finish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --repo "$GH_REPO"

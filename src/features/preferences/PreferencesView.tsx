@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 
 const KEYS = {
   minSize: "destox.minLargeFileSizeMb",
@@ -16,7 +17,13 @@ function usePref(key: string, initial: string) {
   return [value, setValue] as const;
 }
 
-export function PreferencesView() {
+type PreferencesViewProps = {
+  onCheckUpdates: () => void;
+  checkingUpdates: boolean;
+  currentVersion: string;
+};
+
+export function PreferencesView({ onCheckUpdates, checkingUpdates, currentVersion }: PreferencesViewProps) {
   const [minSize, setMinSize] = usePref(KEYS.minSize, "5");
   const [minFolderSize, setMinFolderSize] = usePref(KEYS.minFolderSize, "10");
   const [scanHidden, setScanHidden] = usePref(KEYS.scanHidden, "false");
@@ -35,6 +42,22 @@ export function PreferencesView() {
       </div>
       <div className="app-list">
         <div style={{ padding: 24, display: "grid", gap: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "15px 16px", border: "1px solid #dce8e1", borderRadius: 12, background: "linear-gradient(120deg, #f5faf7, #fff)" }}>
+            <div>
+              <strong style={{ display: "block", fontSize: 13 }}>App updates</strong>
+              <small style={{ display: "block", marginTop: 4, color: "#829087", fontSize: 10 }}>Current version {currentVersion}. Destox also checks for updates when it starts.</small>
+            </div>
+            <button
+              type="button"
+              onClick={onCheckUpdates}
+              disabled={checkingUpdates}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 11px", border: "1px solid #d8e4dd", borderRadius: 8, color: "#4d705f", background: "#fff", fontSize: 10, fontWeight: 650, whiteSpace: "nowrap", cursor: checkingUpdates ? "wait" : "pointer", opacity: checkingUpdates ? .7 : 1 }}
+            >
+              <RefreshCw size={13} className={checkingUpdates ? "update-spin" : undefined} />
+              {checkingUpdates ? "Checking…" : "Check for updates"}
+            </button>
+          </div>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", border: "1px solid #e4e9e7", borderRadius: 10, background: "#fff" }}>
             <div>
               <strong style={{ display: "block", fontSize: 12 }}>Minimum large file size (MB)</strong>

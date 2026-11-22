@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { CloudSun } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { AllAppsView } from "./features/applications/AllAppsView";
@@ -12,10 +14,10 @@ import { AboutView } from "./features/about/AboutView";
 import { PreferencesView } from "./features/preferences/PreferencesView";
 import { PortsView } from "./features/ports/PortsView";
 import { useAppStore } from "./store/appStore";
-import { getPermissions } from "./lib/tauri";
-import { getSystemInfo } from "./lib/tauri";
+import { getAppVersion, getPermissions, getSystemInfo } from "./lib/tauri";
 import { getLocalWeather, WEATHER_ENABLED_KEY } from "./lib/weather";
 import type { LargeScanProgress } from "./features/applications/types";
+import { UpdateDialog, type UpdateDialogState } from "./features/updates/UpdateDialog";
 
 function AppShell() {
   const navigate = useNavigate();
@@ -29,6 +31,10 @@ function AppShell() {
   const [userName, setUserName] = useState("there");
   const [weather, setWeather] = useState<string | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [appVersion, setAppVersion] = useState("0.2.0");
+  const [updateState, setUpdateState] = useState<UpdateDialogState>({ status: "idle" });
+  const updateRef = useRef<Update | null>(null);
+  const updateCheckInFlight = useRef(false);
 
   const visibleApps = apps.filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()),
@@ -51,6 +57,75 @@ function AppShell() {
     getPermissions().then((perms) => { if (perms.some((perm) => !perm.granted)) navigate("/permissions"); }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const checkForUpdates = useCallback(async (manual = false) => {
+    if (updateCheckInFlight.current) {
+      if (manual) setUpdateState((current) => ({ ...current, showDialog: true }));
+      return;
+    }
+    updateCheckInFlight.current = true;
+    setUpdateState({ status: "checking", showDialog: manual });
+    try {
+      await updateRef.current?.close();
+      updateRef.current = null;
+      const update = await check();
+      if (update) {
+        updateRef.current = update;
+        setUpdateState({ status: "available", showDialog: true, version: update.version, notes: update.body });
+      } else {
+        setUpdateState(manual ? { status: "up-to-date", showDialog: true } : { status: "idle" });
+      }
+    } catch (error) {
+      console.warn("Destox update check failed", error);
+      setUpdateState(manual ? { status: "error", showDialog: true, error: String(error) } : { status: "idle" });
+    } finally {
+      updateCheckInFlight.current = false;
+    }
+  }, []);
+
+  const installUpdate = useCallback(async () => {
+    const update = updateRef.current;
+    if (!update) {
+      void checkForUpdates(true);
+      return;
+    }
+    let totalBytes: number | undefined;
+    let downloadedBytes = 0;
+    setUpdateState({ status: "downloading", showDialog: true, version: update.version, notes: update.body, progress: 0 });
+    try {
+      await update.download((event) => {
+        if (event.event === "Started") totalBytes = event.data.contentLength;
+        if (event.event === "Progress") downloadedBytes += event.data.chunkLength;
+        if (event.event === "Finished") {
+          setUpdateState({ status: "installing", showDialog: true, version: update.version, notes: update.body });
+          return;
+        }
+        const progress = totalBytes ? Math.min(99, Math.round(downloadedBytes / totalBytes * 100)) : null;
+        setUpdateState({ status: "downloading", showDialog: true, version: update.version, notes: update.body, progress });
+      });
+      setUpdateState({ status: "installing", showDialog: true, version: update.version, notes: update.body });
+      await update.install();
+      await update.close();
+      updateRef.current = null;
+      await relaunch();
+    } catch (error) {
+      setUpdateState({ status: "error", showDialog: true, version: update.version, notes: update.body, error: String(error) });
+    }
+  }, [checkForUpdates]);
+
+  const closeUpdateDialog = useCallback(() => {
+    const update = updateRef.current;
+    updateRef.current = null;
+    if (update) void update.close();
+    setUpdateState({ status: "idle" });
+  }, []);
+
+  useEffect(() => {
+    void getAppVersion().then(setAppVersion).catch(() => undefined);
+    if (!import.meta.env.PROD) return;
+    const timer = window.setTimeout(() => { void checkForUpdates(false); }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [checkForUpdates]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -139,7 +214,7 @@ function AppShell() {
             <Route path="/large-files" element={<LargeFilesView />} />
             <Route path="/permissions" element={<PermissionsView />} />
             <Route path="/about" element={<AboutView />} />
-            <Route path="/preferences" element={<PreferencesView />} />
+            <Route path="/preferences" element={<PreferencesView onCheckUpdates={() => void checkForUpdates(true)} checkingUpdates={updateState.status === "checking"} currentVersion={appVersion} />} />
             <Route path="/ports" element={<PortsView />} />
             <Route
               path="/trash"
@@ -177,6 +252,8 @@ function AppShell() {
           </div>
         </div>
       )}
+
+      <UpdateDialog state={updateState} onClose={closeUpdateDialog} onInstall={() => void installUpdate()} />
 
       {confirming && (
         <div className="modal-backdrop" role="presentation">
