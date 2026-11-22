@@ -16,6 +16,20 @@ export type AppItem = {
   selected: boolean;
 };
 
+export type ApplicationDetails = {
+  app_type: string;
+  category: string | null;
+  description: string | null;
+  bundle_identifier: string | null;
+  version: string | null;
+  build_version: string | null;
+  publisher: string | null;
+  team_identifier: string | null;
+  last_used: string | null;
+  document_extensions: string[];
+  copyright: string | null;
+};
+
 export type DeletedApp = {
   name: string;
   size_mb: number;
@@ -77,4 +91,22 @@ export type PortInfo = {
   protocol: string;
   process: string;
   pid: number;
+};
+
+export type LargeFolder = {
+  name: string;
+  path: string;
+  size_bytes: number;
+  file_count: number;
+  protected: boolean;
+};
+
+export type LargeScanProgress = {
+  stage: "files" | "folders";
+  scanned_entries: number;
+  files_found: number;
+  category_sizes: Record<string, { count: number; size_bytes: number }>;
+  folder_count: number;
+  folder_size_bytes: number;
+  complete: boolean;
 };

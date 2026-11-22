@@ -18,6 +18,7 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  Terminal,
   Undo2,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export type IconName =
   | "weather"
   | "lock"
   | "network"
+  | "terminal"
   | "search"
   | "settings"
   | "sparkles"
@@ -58,6 +60,7 @@ const icons: Record<IconName, React.ComponentType<{ size?: number; strokeWidth?:
   weather: Cloud,
   lock: Lock,
   network: Network,
+  terminal: Terminal,
   search: Search,
   settings: Settings,
   sparkles: Sparkles,

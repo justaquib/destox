@@ -10,7 +10,7 @@ import {
   getLargeFiles,
   revealInFolder,
 } from "../lib/tauri";
-import type { AppItem, StorageInfo, InstalledApp, TrashItem, LargeFile } from "../features/applications/types";
+import type { AppItem, StorageInfo, InstalledApp, TrashItem, LargeFile, LargeScanProgress } from "../features/applications/types";
 
 type Sort = "size" | "name";
 
@@ -25,12 +25,18 @@ interface AppState {
   message: string;
   confirming: boolean;
   loading: boolean;
+  largeScanProgress: LargeScanProgress | null;
+  setLargeScanProgress: (progress: LargeScanProgress | null) => void;
+  finishLargeScan: () => void;
+  scanInBackground: boolean;
+  setScanInBackground: (value: boolean) => void;
   fetchAll: () => Promise<void>;
   setQuery: (query: string) => void;
   setSort: (sort: Sort) => void;
   toggleApp: (id: number) => void;
   setConfirming: (value: boolean) => void;
   uninstallSelected: () => Promise<void>;
+  uninstallRecentlyInstalled: (path: string) => Promise<void>;
   rescanTrash: () => Promise<void>;
   deleteTrash: (path: string) => Promise<void>;
   recoverTrash: (path: string) => Promise<void>;
@@ -50,6 +56,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   message: "",
   confirming: false,
   loading: true,
+  largeScanProgress: null,
+  scanInBackground: false,
+
+  setLargeScanProgress: (progress) => set((state) => {
+    if (!progress) return { largeScanProgress: null };
+    if (progress.stage !== "folders") return { largeScanProgress: progress };
+    const priorCategorySizes = state.largeScanProgress?.category_sizes ?? {};
+    return {
+      largeScanProgress: {
+        ...progress,
+        category_sizes: { ...priorCategorySizes, ...progress.category_sizes },
+      },
+    };
+  }),
+  setScanInBackground: (scanInBackground) => set({ scanInBackground }),
+  finishLargeScan: () => set((state) => ({
+    largeScanProgress: state.largeScanProgress
+      ? { ...state.largeScanProgress, complete: true }
+      : null,
+    scanInBackground: false,
+  })),
 
   fetchAll: async () => {
     set({ loading: true });
@@ -64,13 +91,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       apps: apps.map((app, index) => ({
         id: index + 1,
         name: app.name,
-        meta: "Application",
+        meta: app.path.endsWith(".app") ? "Application" : "CLI tool",
+        icon: app.icon ?? (app.path.endsWith(".app") ? app.name.charAt(0).toUpperCase() : "T"),
         size:
           app.size_mb > 1024
             ? `${(app.size_mb / 1024).toFixed(2)} GB`
             : `${app.size_mb} MB`,
         sizeMb: app.size_mb,
-        icon: app.icon ?? app.name.charAt(0).toUpperCase(),
         path: app.path,
         selected: false,
       })),
@@ -109,6 +136,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
     } catch (error) {
       set({ confirming: false, message: `Uninstall failed: ${error}` });
+    }
+  },
+
+  uninstallRecentlyInstalled: async (path) => {
+    try {
+      await uninstallApps([path]);
+      const [trash, installed] = await Promise.all([
+        getTrashItems().catch(() => get().trash),
+        getRecentlyInstalled().catch(() => get().installed.filter((item) => item.path !== path)),
+      ]);
+      set((state) => ({
+        apps: state.apps.filter((app) => app.path !== path),
+        trash,
+        installed,
+        message: "Application uninstalled",
+      }));
+    } catch (error) {
+      set({ message: `Uninstall failed: ${error}` });
+      throw error;
     }
   },
 

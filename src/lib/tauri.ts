@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo } from "../features/applications/types";
+import type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo, LargeFolder, ApplicationDetails } from "../features/applications/types";
 
 export async function getStorageInfo(): Promise<StorageInfo> {
   return invoke<StorageInfo>("get_storage_info");
@@ -9,6 +9,10 @@ export async function getInstalledApps(): Promise<
   { name: string; path: string; size_mb: number; icon: string | null }[]
 > {
   return invoke("get_installed_apps");
+}
+
+export async function getApplicationDetails(path: string): Promise<ApplicationDetails> {
+  return invoke<ApplicationDetails>("get_app_details", { path });
 }
 
 export async function uninstallApps(paths: string[]): Promise<void> {
@@ -47,8 +51,16 @@ export async function getLargeFiles(minSizeMb?: number, scanHidden?: boolean): P
   return invoke("get_large_files", { minSizeMb, scanHidden });
 }
 
+export async function getLargeFolders(minSizeMb?: number, scanHidden?: boolean): Promise<LargeFolder[]> {
+  return invoke("get_large_folders", { minSizeMb, scanHidden });
+}
+
 export async function revealInFolder(path: string): Promise<void> {
   return invoke("reveal_in_folder", { path });
+}
+
+export async function getFilePreview(path: string): Promise<string> {
+  return invoke<string>("get_file_preview", { path });
 }
 
 export async function deleteLargeFile(path: string): Promise<void> {
@@ -79,4 +91,4 @@ export async function killPort(pid: number): Promise<void> {
   return invoke("kill_port", { pid });
 }
 
-export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo };
+export type { AppItem, StorageInfo, DeletedApp, InstalledApp, TrashItem, LargeFile, PermissionStatus, SystemInfo, PortInfo, LargeFolder, ApplicationDetails };

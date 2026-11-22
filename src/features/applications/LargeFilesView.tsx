@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../components/Icon";
 import type { IconName } from "../../components/Icon";
-import { getLargeFiles, revealInFolder, deleteLargeFile, getPermissions } from "../../lib/tauri";
+import { getLargeFiles, getLargeFolders, revealInFolder, deleteLargeFile, getFilePreview, getPermissions } from "../../lib/tauri";
 import { useNavigate } from "react-router-dom";
-import type { LargeFile } from "../../features/applications/types";
+import type { LargeFile, LargeFolder } from "../../features/applications/types";
+import { useAppStore } from "../../store/appStore";
 
 type Category = "All" | "Images" | "Videos" | "Documents" | "Folders" | "Temporary" | "Cache" | "Other";
 
@@ -18,14 +19,14 @@ type FileItem = {
 };
 
 const categories = [
-  { name: "All", icon: "grid", count: 124, size: "36.2 GB" },
-  { name: "Images", icon: "image", count: 38, size: "8.4 GB" },
-  { name: "Videos", icon: "video", count: 16, size: "14.8 GB" },
-  { name: "Documents", icon: "document", count: 42, size: "5.3 GB" },
-  { name: "Folders", icon: "folder", count: 12, size: "4.9 GB" },
-  { name: "Temporary", icon: "clock", count: 9, size: "1.6 GB" },
-  { name: "Cache", icon: "archive", count: 7, size: "1.2 GB" },
-  { name: "Other", icon: "file", count: 0, size: "" },
+  { name: "All", icon: "grid" },
+  { name: "Images", icon: "image" },
+  { name: "Videos", icon: "video" },
+  { name: "Documents", icon: "document" },
+  { name: "Folders", icon: "folder" },
+  { name: "Temporary", icon: "clock" },
+  { name: "Cache", icon: "archive" },
+  { name: "Other", icon: "file" },
 ] as const;
 
 function categoryIcon(category: FileItem["category"]): IconName {
@@ -41,19 +42,45 @@ function categoryIcon(category: FileItem["category"]): IconName {
   return icons[category];
 }
 
+function previewKind(path: string): "image" | "video" | "pdf" | null {
+  const extension = path.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"].includes(extension)) return "image";
+  if (["mp4", "m4v", "mov", "webm", "ogv", "avi", "mkv", "wmv"].includes(extension)) return "video";
+  if (extension === "pdf") return "pdf";
+  return null;
+}
+
 export function LargeFilesView() {
   const [files, setFiles] = useState<LargeFile[]>([]);
+  const [folders, setFolders] = useState<LargeFolder[]>([]);
   const [loading, setLoading] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("All");
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [foldersLoaded, setFoldersLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [pendingPath, setPendingPath] = useState("");
+  const [scanModalDismissed, setScanModalDismissed] = useState(false);
+  const [scanPaused, setScanPaused] = useState(false);
+  const [previewFile, setPreviewFile] = useState<LargeFile | null>(null);
+  const [previewSource, setPreviewSource] = useState("");
+  const [previewError, setPreviewError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const scanInFlight = useRef(false);
+  const folderScanInFlight = useRef(false);
+  const scanProgress = useAppStore((state) => state.largeScanProgress);
+  const setLargeScanProgress = useAppStore((state) => state.setLargeScanProgress);
+  const finishLargeScan = useAppStore((state) => state.finishLargeScan);
+  const setScanInBackground = useAppStore((state) => state.setScanInBackground);
 
   const navigate = useNavigate();
   const load = async () => {
+    if (scanInFlight.current) return;
+    scanInFlight.current = true;
+    setScanModalDismissed(false);
+    setScanInBackground(false);
     setLoading(true);
     setError("");
     try {
@@ -65,7 +92,8 @@ export function LargeFilesView() {
         return;
       }
       setPermissionGranted(true);
-      const minSize = Number(localStorage.getItem("destox.minLargeFileSizeMb") ?? "5");
+      setLargeScanProgress({ stage: "files", scanned_entries: 0, files_found: 0, category_sizes: {}, folder_count: 0, folder_size_bytes: 0, complete: false });
+      const minSize = Math.max(1, Number(localStorage.getItem("destox.minLargeFileSizeMb") ?? "5") || 5);
       const scanHidden = localStorage.getItem("destox.scanHidden") === "true";
       const data = await getLargeFiles(minSize, scanHidden);
       setFiles(data);
@@ -73,12 +101,62 @@ export function LargeFilesView() {
       setError(String(e));
     } finally {
       setLoading(false);
+      scanInFlight.current = false;
+      finishLargeScan();
     }
   };
 
   useEffect(() => {
-    load();
+    if (localStorage.getItem("destox.autoScan") === "false") {
+      setScanPaused(true);
+      return;
+    }
+    void load();
   }, []);
+
+  useEffect(() => {
+    if (!previewFile) return;
+    let current = true;
+    setPreviewSource("");
+    setPreviewError("");
+    setPreviewLoading(true);
+    getFilePreview(previewFile.path)
+      .then((source) => { if (current) setPreviewSource(source); })
+      .catch((reason) => { if (current) setPreviewError(String(reason)); })
+      .finally(() => { if (current) setPreviewLoading(false); });
+    return () => { current = false; };
+  }, [previewFile]);
+
+  useEffect(() => {
+    if (!previewFile) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewFile(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [previewFile]);
+
+  useEffect(() => {
+    if (activeCategory === "Folders" && !foldersLoaded) {
+      if (folderScanInFlight.current) return;
+      folderScanInFlight.current = true;
+      setScanModalDismissed(false);
+      setScanInBackground(false);
+      const scanHidden = localStorage.getItem("destox.scanHidden") === "true";
+      setLoading(true);
+      setError("");
+      setLargeScanProgress({ stage: "folders", scanned_entries: 0, files_found: 0, category_sizes: {}, folder_count: 0, folder_size_bytes: 0, complete: false });
+      getLargeFolders(Number(localStorage.getItem("destox.minLargeFolderSizeMb") ?? "10"), scanHidden)
+        .then(setFolders)
+        .catch((e) => setError(String(e)))
+        .finally(() => {
+          setFoldersLoaded(true);
+          setLoading(false);
+          folderScanInFlight.current = false;
+          finishLargeScan();
+        });
+    }
+  }, [activeCategory, foldersLoaded]);
 
   const visibleFiles = useMemo(
     () =>
@@ -100,9 +178,43 @@ export function LargeFilesView() {
       totalCount += 1;
       totalSize += file.size_bytes;
     }
+    if (scanProgress?.stage === "files" && (!scanProgress.complete || Object.keys(scanProgress.category_sizes).length > 0)) {
+      for (const [name, tally] of Object.entries(scanProgress.category_sizes)) {
+        stats[name] = { count: tally.count, size: tally.size_bytes };
+      }
+      totalCount = scanProgress.files_found;
+      totalSize = Object.values(scanProgress.category_sizes).reduce((sum, tally) => sum + tally.size_bytes, 0);
+    } else if (scanProgress?.stage === "folders" && Object.keys(scanProgress.category_sizes).length > 0) {
+      const fileTotals = Object.entries(scanProgress.category_sizes).filter(([name]) => name !== "Folders");
+      for (const [name, tally] of fileTotals) stats[name] = { count: tally.count, size: tally.size_bytes };
+      totalCount = fileTotals.reduce((sum, [, tally]) => sum + tally.count, 0);
+      totalSize = fileTotals.reduce((sum, [, tally]) => sum + tally.size_bytes, 0);
+    }
     stats.All = { count: totalCount, size: totalSize };
+    if (scanProgress?.stage === "folders" && (!scanProgress.complete || scanProgress.folder_count > 0)) {
+      stats.Folders = { count: scanProgress.folder_count, size: scanProgress.folder_size_bytes };
+    } else if (folders.length > 0) {
+      stats.Folders = {
+        count: folders.length,
+        size: folders.reduce((sum, folder) => sum + folder.size_bytes, 0),
+      };
+    }
     return stats;
-  }, [files]);
+  }, [files, folders, scanProgress]);
+
+  const availableCategories = useMemo(
+    () => categories.filter((category) =>
+      (category.name === "Folders" && (!foldersLoaded || scanProgress?.stage === "folders" && !scanProgress.complete))
+      || (categoryStats[category.name]?.size ?? 0) > 0,
+    ),
+    [categoryStats, foldersLoaded, scanProgress],
+  );
+
+  useEffect(() => {
+    if (scanProgress?.complete && !availableCategories.some((category) => category.name === activeCategory)) {
+      setActiveCategory("All");
+    }
+  }, [activeCategory, availableCategories, scanProgress?.complete]);
 
   const formatBytes = (bytes: number) =>
     bytes >= 1024 * 1024 * 1024
@@ -113,10 +225,55 @@ export function LargeFilesView() {
 
   return (
     <>
+      {previewFile && (
+        <div className="modal-backdrop preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewFile(null); }}>
+          <section className="file-preview-modal" role="dialog" aria-modal="true" aria-labelledby="file-preview-title">
+            <header className="file-preview-header">
+              <div>
+                <span className="file-preview-eyebrow">{previewKind(previewFile.path) === "pdf" ? "PDF document" : previewKind(previewFile.path) === "video" ? "Video preview" : "Image preview"}</span>
+                <h2 id="file-preview-title" title={previewFile.name}>{previewFile.name}</h2>
+              </div>
+              <button type="button" className="file-preview-close" onClick={() => setPreviewFile(null)} aria-label="Close preview">×</button>
+            </header>
+            <div className="file-preview-stage">
+              {previewLoading && <span className="file-preview-message">Preparing preview…</span>}
+              {previewError && <span className="file-preview-message file-preview-error">{previewError}</span>}
+              {previewSource && previewKind(previewFile.path) === "image" && <img src={previewSource} alt={previewFile.name} onError={() => setPreviewError("This image format could not be displayed in the preview.")} />}
+              {previewSource && previewKind(previewFile.path) === "video" && <video src={previewSource} controls playsInline onError={() => setPreviewError("This video format or codec could not be played in the preview.")} />}
+              {previewSource && previewKind(previewFile.path) === "pdf" && <iframe src={previewSource} title={`Preview of ${previewFile.name}`} />}
+            </div>
+            <div className="file-preview-details">
+              <div><small>File type</small><strong>{previewFile.category} · {previewFile.name.split(".").pop()?.toUpperCase()}</strong></div>
+              <div><small>File size</small><strong>{formatBytes(previewFile.size_bytes)}</strong></div>
+              <div><small>Last modified</small><strong>{new Date(previewFile.modified_at * 1000).toLocaleString()}</strong></div>
+              <div className="file-preview-path"><small>Location</small><strong title={previewFile.path}>{previewFile.path}</strong></div>
+            </div>
+            <footer className="file-preview-footer">
+              <button type="button" onClick={() => { void revealInFolder(previewFile.path); }}>Show in Finder</button>
+              <button type="button" className="file-preview-done" onClick={() => setPreviewFile(null)}>Done</button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {loading && !scanModalDismissed && (
+        <div className="modal-backdrop scan-backdrop" role="dialog" aria-modal="true" aria-labelledby="scan-title">
+          <div className="scan-modal">
+            <span className="scan-spinner" aria-hidden="true" />
+            <div>
+              <strong id="scan-title">Scanning your files</strong>
+              <span>Destox is checking folders. Continue in the background to keep using the app.</span>
+              <button className="scan-continue-button" onClick={() => {
+                setScanModalDismissed(true);
+                setScanInBackground(true);
+              }} type="button">Continue in background</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="toolbar">
         <p>
           <strong>{activeCategory === "All" ? "All large files" : activeCategory}</strong>
-          <span>· {visibleFiles.length} shown</span>
+          <span>· {scanProgress?.stage === "files" && !scanProgress.complete ? `${scanProgress.files_found} found so far` : `${visibleFiles.length} shown`}</span>
         </p>
         <div>
           <label className="sort-select">
@@ -148,11 +305,20 @@ export function LargeFilesView() {
           </button>
         </div>
       )}
-      {loading && <div className="empty-state"><strong>Scanning files…</strong></div>}
+      {scanPaused && !loading && !permissionGranted && (
+        <div className="empty-state">
+          <Icon name="search" size={24} />
+          <strong>Ready when you are</strong>
+          <span>Automatic scanning is off. Start a scan to find files that match your size threshold.</span>
+          <button type="button" onClick={() => { setScanPaused(false); void load(); }} style={{ marginTop: 12, border: "none", background: "#527666", color: "#fff", padding: "8px 14px", borderRadius: 8, cursor: "pointer" }}>
+            Scan now
+          </button>
+        </div>
+      )}
       {error && <div className="empty-state"><strong>Error</strong><span>{error}</span></div>}
       <section className="category-section" aria-label="File categories">
         <div className="category-strip">
-          {categories.map((category) => (
+          {availableCategories.map((category) => (
             <button
               className={`category-card ${activeCategory === category.name ? "active" : ""}`}
               key={category.name}
@@ -166,15 +332,59 @@ export function LargeFilesView() {
               </span>
               <span className="category-copy">
                 <strong>{category.name}</strong>
-                <small>{categoryStats[category.name]?.count ?? 0} items</small>
+                <small>{category.name === "Folders" && !foldersLoaded && scanProgress?.stage !== "folders"
+                  ? "Scan to calculate"
+                  : `${categoryStats[category.name]?.count ?? 0} items`}</small>
               </span>
-              <b>{formatBytes(categoryStats[category.name]?.size ?? 0)}</b>
+              <b>{category.name === "Folders" && !foldersLoaded && scanProgress?.stage !== "folders"
+                ? "Scan"
+                : scanProgress?.stage === "folders" && !scanProgress.complete && !(categoryStats[category.name]?.size)
+                ? "Scanning…"
+                : formatBytes(categoryStats[category.name]?.size ?? 0)}</b>
             </button>
           ))}
         </div>
       </section>
 
-      {viewMode === "list" ? (
+      {activeCategory === "Folders" ? (
+        <div className="app-list file-list">
+          {folders.length === 0 && (
+            <div className="empty-state">
+              <Icon name="folder" size={24} />
+              <strong>{loading ? "Scanning folders…" : "No large folders found"}</strong>
+              <span>{loading ? "Folder sizes will update as the scan progresses." : `Folders at least ${Number(localStorage.getItem("destox.minLargeFolderSizeMb") ?? "10")} MB will appear here.`}</span>
+            </div>
+          )}
+          {folders.map((folder, index) => (
+            <div className="app-row file-row" key={`${folder.path}-${index}`}>
+              <span />
+              <span className="file-type-icon type-folders">
+                <Icon name="folder" size={19} />
+              </span>
+              <span className="app-details">
+                <strong>{folder.name}</strong>
+                <small>{folder.path}</small>
+              </span>
+              <span className="modified-date">{folder.file_count} files</span>
+              <span className="app-size">
+                {folder.size_bytes >= 1024 * 1024 * 1024
+                  ? `${(folder.size_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                  : `${(folder.size_bytes / (1024 * 1024)).toFixed(2)} MB`}
+              </span>
+              <span className="row-arrow" style={{ display: "flex", gap: "6px", opacity: 1 }}>
+                <button
+                  type="button"
+                  title="Show in folder"
+                  onClick={() => revealInFolder(folder.path)}
+                  style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit" }}
+                >
+                  <Icon name="folder" size={16} />
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : viewMode === "list" ? (
       <div className="app-list file-list">
         <div className="list-head file-list-head">
           <span>Name & location</span>
@@ -183,7 +393,15 @@ export function LargeFilesView() {
           <span />
         </div>
         {visibleFiles.map((file, index) => (
-          <div className="app-row file-row" key={`${file.path}-${index}`}>
+          <div
+            className="app-row file-row"
+            key={`${file.path}-${index}`}
+            onClick={() => { if (previewKind(file.path)) setPreviewFile(file); }}
+            onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && previewKind(file.path)) { event.preventDefault(); setPreviewFile(file); } }}
+            role={previewKind(file.path) ? "button" : undefined}
+            tabIndex={previewKind(file.path) ? 0 : undefined}
+            style={{ cursor: previewKind(file.path) ? "pointer" : undefined }}
+          >
             <span />
             <span className={`file-type-icon type-${file.category.toLowerCase()}`}>
               <Icon name={categoryIcon(file.category as any)} size={19} />
@@ -208,7 +426,7 @@ export function LargeFilesView() {
               <button
                 type="button"
                 title="Show in folder"
-                onClick={() => revealInFolder(file.path)}
+                onClick={(event) => { event.stopPropagation(); void revealInFolder(file.path); }}
                 style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit" }}
               >
                 <Icon name="folder" size={16} />
@@ -217,7 +435,8 @@ export function LargeFilesView() {
                 type="button"
                 title="Delete"
                 disabled={file.protected}
-                onClick={async () => {
+                onClick={async (event) => {
+                  event.stopPropagation();
                   if (file.protected) return;
                   if (localStorage.getItem("destox.confirmDelete") === "false") {
                     await deleteLargeFile(file.path);
@@ -237,15 +456,22 @@ export function LargeFilesView() {
         {visibleFiles.length === 0 && (
           <div className="empty-state">
             <Icon name="search" size={24} />
-            <strong>No files found</strong>
-            <span>Try another category or search.</span>
+            <strong>{loading ? "Scanning this section…" : "No files found"}</strong>
+            <span>{loading ? "Results and size totals update as files are checked." : "Try another category or search."}</span>
           </div>
         )}
       </div>
       ) : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, padding: 16 }}>
         {visibleFiles.map((file, index) => (
-          <div key={`${file.path}-${index}`} style={{ border: "1px solid #e4e9e7", borderRadius: 12, padding: 12, background: "#fff" }}>
+          <div
+            key={`${file.path}-${index}`}
+            onClick={() => { if (previewKind(file.path)) setPreviewFile(file); }}
+            onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && previewKind(file.path)) { event.preventDefault(); setPreviewFile(file); } }}
+            role={previewKind(file.path) ? "button" : undefined}
+            tabIndex={previewKind(file.path) ? 0 : undefined}
+            style={{ border: "1px solid #e4e9e7", borderRadius: 12, padding: 12, background: "#fff", cursor: previewKind(file.path) ? "pointer" : undefined }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <span className={`file-type-icon type-${file.category.toLowerCase()}`}>
                 <Icon name={categoryIcon(file.category as any)} size={19} />
@@ -273,7 +499,7 @@ export function LargeFilesView() {
             <button
               type="button"
               title="Show in folder"
-              onClick={() => revealInFolder(file.path)}
+                onClick={(event) => { event.stopPropagation(); void revealInFolder(file.path); }}
               style={{ border: "none", background: "transparent", cursor: "pointer", color: "#527666", marginRight: 8 }}
             >
               <Icon name="folder" size={16} />
@@ -282,7 +508,8 @@ export function LargeFilesView() {
               type="button"
               title="Delete"
               disabled={file.protected}
-              onClick={async () => {
+              onClick={async (event) => {
+                event.stopPropagation();
                 if (file.protected) return;
                 if (localStorage.getItem("destox.confirmDelete") === "false") {
                   await deleteLargeFile(file.path);
@@ -301,8 +528,8 @@ export function LargeFilesView() {
         {visibleFiles.length === 0 && (
           <div className="empty-state">
             <Icon name="search" size={24} />
-            <strong>No files found</strong>
-            <span>Try another category or search.</span>
+            <strong>{loading ? "Scanning this section…" : "No files found"}</strong>
+            <span>{loading ? "Results and size totals update as files are checked." : "Try another category or search."}</span>
           </div>
         )}
       </div>
@@ -310,12 +537,15 @@ export function LargeFilesView() {
 
       <div className="toolbar">
         <p>
-          <strong>{visibleFiles.length} files larger than 5 MB</strong>
+          <strong>{visibleFiles.length} files at least {Number(localStorage.getItem("destox.minLargeFileSizeMb") ?? "5")} MB</strong>
         </p>
         <button
           className="uninstall-button"
           type="button"
-          onClick={load}
+          onClick={() => {
+            if (activeCategory === "Folders") setFoldersLoaded(false);
+            else void load();
+          }}
           style={{ marginLeft: "auto" }}
         >
           Rescan

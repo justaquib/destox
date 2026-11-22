@@ -1,11 +1,31 @@
+import { useState } from "react";
 import { Icon } from "../../components/Icon";
 import type { InstalledApp } from "./types";
 
 type Props = {
   installed: InstalledApp[];
+  onDelete: (path: string) => Promise<void>;
 };
 
-export function RecentlyInstalledView({ installed }: Props) {
+export function RecentlyInstalledView({ installed, onDelete }: Props) {
+  const [pending, setPending] = useState<InstalledApp | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const confirmDelete = async () => {
+    if (!pending) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await onDelete(pending.path);
+      setPending(null);
+    } catch (error) {
+      setDeleteError(String(error));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <>
       <div className="toolbar">
@@ -38,10 +58,33 @@ export function RecentlyInstalledView({ installed }: Props) {
             <span className="app-size">
               {item.size_mb > 1024 ? `${(item.size_mb / 1024).toFixed(2)} GB` : `${item.size_mb} MB`}
             </span>
-            <span />
+            <button
+              className="recent-delete-button"
+              onClick={() => { setDeleteError(""); setPending(item); }}
+              type="button"
+              aria-label={`Uninstall ${item.name}`}
+              title={`Uninstall ${item.name}`}
+            >
+              <Icon name="trash" size={16} />
+            </button>
           </div>
         ))}
       </div>
+      {pending && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="recent-delete-title">
+            <h2 id="recent-delete-title">Uninstall {pending.name}?</h2>
+            <p>This removes the application from your Mac and clears it from Recently Installed.</p>
+            {deleteError && <p className="delete-error">{deleteError}</p>}
+            <div className="modal-actions">
+              <button disabled={deleting} onClick={() => setPending(null)} type="button">Cancel</button>
+              <button className="confirm-button" disabled={deleting} onClick={confirmDelete} type="button">
+                {deleting ? "Uninstalling…" : "Uninstall"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
